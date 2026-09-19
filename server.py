@@ -124,15 +124,21 @@ class LikesDB:
                     urls TEXT DEFAULT '[]',
                     raw_json TEXT DEFAULT '{}',
                     is_liked INTEGER DEFAULT 1,
-                    is_read INTEGER DEFAULT 0
+                    is_read INTEGER DEFAULT 0,
+                    sort_index INTEGER DEFAULT 0
                 )
             """)
             try:
                 conn.execute("ALTER TABLE likes ADD COLUMN is_read INTEGER DEFAULT 0")
             except Exception:
                 pass
+            try:
+                conn.execute("ALTER TABLE likes ADD COLUMN sort_index INTEGER DEFAULT 0")
+            except Exception:
+                pass
             conn.execute("CREATE INDEX IF NOT EXISTS idx_likes_is_liked ON likes(is_liked)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_likes_is_read ON likes(is_read)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_likes_sort_index ON likes(sort_index DESC)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_likes_created_at_ts ON likes(created_at_ts DESC)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_likes_author ON likes(author_screen_name)")
 
@@ -158,8 +164,8 @@ class LikesDB:
                     INSERT INTO likes (
                         id, author_name, author_screen_name, author_avatar, text,
                         created_at, created_at_ts, liked_at, favorite_count, retweet_count,
-                        reply_count, media_urls, urls, raw_json, is_liked
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        reply_count, media_urls, urls, raw_json, is_liked, sort_index
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         author_name=excluded.author_name,
                         author_screen_name=excluded.author_screen_name,
@@ -169,13 +175,16 @@ class LikesDB:
                         retweet_count=excluded.retweet_count,
                         reply_count=excluded.reply_count,
                         media_urls=excluded.media_urls,
-                        urls=excluded.urls
+                        urls=excluded.urls,
+                        is_liked=1,
+                        liked_at=excluded.liked_at,
+                        sort_index=MAX(likes.sort_index, excluded.sort_index)
                 """, (
                     t["id"], t["author_name"], t["author_screen_name"], t["author_avatar"],
                     t["text"], t["created_at"], t["created_at_ts"], int(time.time()),
                     t["favorite_count"], t["retweet_count"], t["reply_count"],
                     json.dumps(t["media_urls"]), json.dumps(t["urls"]), json.dumps(t.get("raw_json", {})),
-                    t.get("is_liked", 1)
+                    t.get("is_liked", 1), t.get("sort_index", 0)
                 ))
             conn.commit()
         return {"total": len(tweets), "new": new_count, "existing": existing_count}
@@ -234,8 +243,11 @@ class LikesDB:
                 order_clause = "ORDER BY created_at_ts ASC"
             elif sort == "popular":
                 order_clause = "ORDER BY favorite_count DESC, retweet_count DESC"
-            else:
+            elif sort == "tweet_date":
                 order_clause = "ORDER BY created_at_ts DESC, rowid DESC"
+            else:
+                # Default "newest": strictly order by X Likes timeline sort_index, then liked_at
+                order_clause = "ORDER BY sort_index DESC, liked_at DESC, created_at_ts DESC"
 
             # Total count
             count_sql = f"SELECT COUNT(*) as cnt FROM likes {where_clause}"
@@ -388,6 +400,13 @@ class XClient:
                         if not t or "rest_id" not in t:
                             continue
 
+                        sort_index = 0
+                        if "sortIndex" in entry:
+                            try:
+                                sort_index = int(entry["sortIndex"])
+                            except Exception:
+                                pass
+
                         tweet_id = t.get("rest_id")
                         user = t.get("core", {}).get("user_results", {}).get("result", {})
                         author_name = user.get("core", {}).get("name") or user.get("legacy", {}).get("name") or ""
@@ -438,7 +457,8 @@ class XClient:
                             "media_urls": media_list,
                             "urls": url_list,
                             "raw_json": t,
-                            "is_liked": 1
+                            "is_liked": 1,
+                            "sort_index": sort_index
                         })
                     elif entry_type == "TimelineTimelineCursor":
                         if content.get("cursorType") == "Bottom":
