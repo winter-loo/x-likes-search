@@ -602,6 +602,42 @@
       box-shadow: 0 0 12px rgba(16, 185, 129, 0.2);
     }
 
+    .btn-read {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: var(--radius-full);
+      background: rgba(99, 102, 241, 0.1);
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      color: #a5b4fc;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition-fast);
+    }
+    .btn-read:hover {
+      background: rgba(99, 102, 241, 0.22);
+      border-color: var(--accent-primary);
+      color: white;
+      box-shadow: 0 0 12px var(--accent-primary-glow);
+      transform: scale(1.02);
+    }
+    .btn-read.is-read {
+      background: rgba(16, 185, 129, 0.12);
+      border-color: rgba(16, 185, 129, 0.3);
+      color: #6ee7b7;
+    }
+    .btn-read.is-read:hover {
+      background: rgba(244, 63, 94, 0.12);
+      border-color: rgba(244, 63, 94, 0.3);
+      color: #fda4af;
+    }
+
+    .tweet-card.is-read {
+      opacity: 0.65;
+    }
+
     /* Skeleton Loading */
     .skeleton-card {
       background: var(--bg-card);
@@ -772,6 +808,7 @@
     <!-- Filter & Readout -->
     <div class="controls-bar">
       <div class="filter-chips">
+        <div class="chip" data-filter="unread">Unread Only 📖</div>
         <div class="chip active" data-filter="all">All Likes</div>
         <div class="chip" data-filter="media">With Media 🖼️</div>
         <div class="chip" data-filter="unliked">Cancelled / Unliked</div>
@@ -810,6 +847,7 @@
       q: '',
       onlyMedia: false,
       includeUnliked: false,
+      unreadOnly: false,
       sort: 'newest',
       limit: 30,
       offset: 0,
@@ -953,6 +991,7 @@
         q: state.q,
         only_media: state.onlyMedia,
         include_unliked: state.includeUnliked,
+        unread_only: state.unreadOnly,
         sort: state.sort,
         limit: state.limit,
         offset: state.offset
@@ -1030,6 +1069,7 @@
       feedContainer.innerHTML = state.items.map(tweet => {
         const xPostUrl = `https://x.com/${escapeHtml(tweet.author_screen_name || 'i')}/status/${tweet.id}`;
         const isUnliked = tweet.is_liked === 0;
+        const isRead = tweet.is_read === 1;
 
         // Avatar fallback
         const avatarHtml = tweet.author_avatar
@@ -1050,7 +1090,7 @@
         }
 
         return `
-          <article class="tweet-card ${isUnliked ? 'unliked' : ''}" id="card-${tweet.id}">
+          <article class="tweet-card ${isUnliked ? 'unliked' : ''} ${isRead ? 'is-read' : ''}" id="card-${tweet.id}">
             <div class="tweet-header">
               <a href="${xPostUrl}" target="_blank" rel="noopener noreferrer" class="author-info" title="Open profile / post on X">
                 <div class="avatar-wrapper">
@@ -1097,17 +1137,81 @@
                 </span>
               </div>
 
-              <button 
-                class="btn-unlike ${isUnliked ? 'is-unliked' : ''}" 
-                onclick="toggleLike('${tweet.id}', ${isUnliked})"
-                title="${isUnliked ? 'Click to re-like on X' : 'Click to cancel like on X'}"
-              >
-                ${isUnliked ? '🤍 Re-like' : '💔 Cancel Like'}
-              </button>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <button 
+                  class="btn-read ${isRead ? 'is-read' : ''}" 
+                  onclick="toggleRead('${tweet.id}', ${isRead})"
+                  title="${isRead ? 'Mark as unread' : 'Mark as read'}"
+                >
+                  ${isRead ? '✓ Read' : '📖 Mark Read'}
+                </button>
+
+                <button 
+                  class="btn-unlike ${isUnliked ? 'is-unliked' : ''}" 
+                  onclick="toggleLike('${tweet.id}', ${isUnliked})"
+                  title="${isUnliked ? 'Click to re-like on X' : 'Click to cancel like on X'}"
+                >
+                  ${isUnliked ? '🤍 Re-like' : '💔 Cancel Like'}
+                </button>
+              </div>
             </div>
           </article>
         `;
       }).join('');
+    }
+
+    // Toggle Read Status
+    async function toggleRead(tweetId, currentlyRead) {
+      const card = document.getElementById(`card-${tweetId}`);
+      const btn = card?.querySelector('.btn-read');
+      const newStatus = currentlyRead ? 0 : 1;
+
+      // Optimistic UI Update
+      if (newStatus === 1) {
+        if (state.unreadOnly) {
+          if (card) {
+            card.style.transition = 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+            card.style.opacity = '0';
+            card.style.transform = 'scale(0.96)';
+            setTimeout(() => card.remove(), 250);
+          }
+          showToast('Marked as read', 'Undo', () => toggleRead(tweetId, true));
+        } else {
+          if (card) card.classList.add('is-read');
+          if (btn) {
+            btn.className = 'btn-read is-read';
+            btn.innerHTML = '✓ Read';
+            btn.onclick = () => toggleRead(tweetId, true);
+          }
+          showToast('Marked as read', 'Undo', () => toggleRead(tweetId, true));
+        }
+      } else {
+        if (card) {
+          card.classList.remove('is-read');
+          card.style.opacity = '1';
+          card.style.transform = 'scale(1)';
+        }
+        if (btn) {
+          btn.className = 'btn-read';
+          btn.innerHTML = '📖 Mark Read';
+          btn.onclick = () => toggleRead(tweetId, false);
+        }
+        showToast('Marked as unread');
+      }
+
+      const item = state.items.find(i => i.id === tweetId);
+      if (item) item.is_read = newStatus;
+
+      try {
+        await fetch('/api/read', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tweet_id: tweetId, is_read: newStatus })
+        });
+        checkStatus();
+      } catch (err) {
+        showToast('Failed to update read status');
+      }
     }
 
     // Toggle Like / Unlike
@@ -1236,8 +1340,13 @@
         if (filter === 'all') {
           state.onlyMedia = false;
           state.includeUnliked = false;
+          state.unreadOnly = false;
           document.querySelectorAll('.filter-chips [data-filter]').forEach(c => c.classList.remove('active'));
           chip.classList.add('active');
+        } else if (filter === 'unread') {
+          state.unreadOnly = !state.unreadOnly;
+          chip.classList.toggle('active', state.unreadOnly);
+          document.querySelector('.filter-chips [data-filter="all"]').classList.remove('active');
         } else if (filter === 'media') {
           state.onlyMedia = !state.onlyMedia;
           chip.classList.toggle('active', state.onlyMedia);

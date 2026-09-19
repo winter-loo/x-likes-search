@@ -123,10 +123,16 @@ class LikesDB:
                     media_urls TEXT DEFAULT '[]',
                     urls TEXT DEFAULT '[]',
                     raw_json TEXT DEFAULT '{}',
-                    is_liked INTEGER DEFAULT 1
+                    is_liked INTEGER DEFAULT 1,
+                    is_read INTEGER DEFAULT 0
                 )
             """)
+            try:
+                conn.execute("ALTER TABLE likes ADD COLUMN is_read INTEGER DEFAULT 0")
+            except Exception:
+                pass
             conn.execute("CREATE INDEX IF NOT EXISTS idx_likes_is_liked ON likes(is_liked)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_likes_is_read ON likes(is_read)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_likes_created_at_ts ON likes(created_at_ts DESC)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_likes_author ON likes(author_screen_name)")
 
@@ -150,7 +156,8 @@ class LikesDB:
                         retweet_count=excluded.retweet_count,
                         reply_count=excluded.reply_count,
                         media_urls=excluded.media_urls,
-                        urls=excluded.urls
+                        urls=excluded.urls,
+                        is_liked=excluded.is_liked
                 """, (
                     t["id"], t["author_name"], t["author_screen_name"], t["author_avatar"],
                     t["text"], t["created_at"], t["created_at_ts"], int(time.time()),
@@ -169,11 +176,18 @@ class LikesDB:
             conn.commit()
 
     @classmethod
+    def set_read_status(cls, tweet_id: str, is_read: int):
+        with cls.get_conn() as conn:
+            conn.execute("UPDATE likes SET is_read = ? WHERE id = ?", (is_read, tweet_id))
+            conn.commit()
+
+    @classmethod
     def search(
         cls,
         q: Optional[str] = None,
         only_media: bool = False,
         include_unliked: bool = False,
+        unread_only: bool = False,
         sort: str = "newest",
         limit: int = 50,
         offset: int = 0
@@ -184,6 +198,9 @@ class LikesDB:
 
             if not include_unliked:
                 conditions.append("is_liked = 1")
+
+            if unread_only:
+                conditions.append("is_read = 0")
 
             if only_media:
                 conditions.append("media_urls != '[]' AND media_urls IS NOT NULL")
@@ -233,11 +250,15 @@ class LikesDB:
         with cls.get_conn() as conn:
             total = conn.execute("SELECT COUNT(*) as cnt FROM likes").fetchone()["cnt"]
             active = conn.execute("SELECT COUNT(*) as cnt FROM likes WHERE is_liked = 1").fetchone()["cnt"]
+            unread = conn.execute("SELECT COUNT(*) as cnt FROM likes WHERE is_liked = 1 AND is_read = 0").fetchone()["cnt"]
+            read_cnt = conn.execute("SELECT COUNT(*) as cnt FROM likes WHERE is_liked = 1 AND is_read = 1").fetchone()["cnt"]
             media_cnt = conn.execute("SELECT COUNT(*) as cnt FROM likes WHERE is_liked = 1 AND media_urls != '[]'").fetchone()["cnt"]
             unliked = total - active
             return {
                 "total": total,
                 "active_likes": active,
+                "unread": unread,
+                "read": read_cnt,
                 "unliked": unliked,
                 "with_media": media_cnt
             }
@@ -533,6 +554,7 @@ def search_likes(
     q: Optional[str] = Query(None),
     only_media: bool = Query(False),
     include_unliked: bool = Query(False),
+    unread_only: bool = Query(False),
     sort: str = Query("newest"),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0)
@@ -542,6 +564,7 @@ def search_likes(
         q=q,
         only_media=only_media,
         include_unliked=include_unliked,
+        unread_only=unread_only,
         sort=sort,
         limit=limit,
         offset=offset
@@ -565,6 +588,17 @@ def trigger_sync(req: SyncRequest, bg_tasks: BackgroundTasks):
 
 class TweetActionRequest(BaseModel):
     tweet_id: str
+
+
+class ReadActionRequest(BaseModel):
+    tweet_id: str
+    is_read: int = 1
+
+
+@app.post("/api/read")
+def toggle_read(req: ReadActionRequest):
+    LikesDB.set_read_status(req.tweet_id, req.is_read)
+    return {"success": True, "tweet_id": req.tweet_id, "is_read": req.is_read}
 
 
 @app.post("/api/unlike")
