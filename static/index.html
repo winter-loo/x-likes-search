@@ -774,12 +774,17 @@
           <span id="statusText">Checking...</span>
         </div>
 
-        <button class="btn btn-primary" id="btnSync">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" id="syncSvg">
-            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-          </svg>
-          <span id="syncBtnLabel">Sync Likes</span>
-        </button>
+        <div style="display: flex; align-items: center; gap: 4px;">
+          <button class="btn btn-primary" id="btnSync" title="Incremental sync (fast, fetches until existing likes are reached)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" id="syncSvg">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+            <span id="syncBtnLabel">Sync New</span>
+          </button>
+          <button class="btn btn-secondary" id="btnFullSync" title="Full historical sync (fetches all pages)" style="padding: 8px 12px; font-size: 12px;">
+            Full Sync
+          </button>
+        </div>
       </div>
     </header>
 
@@ -865,6 +870,7 @@
     const statusDot = document.getElementById('statusDot');
     const statusText = document.getElementById('statusText');
     const btnSync = document.getElementById('btnSync');
+    const btnFullSync = document.getElementById('btnFullSync');
     const syncBtnLabel = document.getElementById('syncBtnLabel');
     const syncSvg = document.getElementById('syncSvg');
     const btnLoadMore = document.getElementById('btnLoadMore');
@@ -961,15 +967,17 @@
         if (data.is_syncing) {
           state.isSyncing = true;
           statusDot.className = 'status-dot syncing';
-          statusText.textContent = `Syncing page ${data.current_page}...`;
-          syncBtnLabel.textContent = 'Syncing...';
+          statusText.textContent = `Syncing p.${data.current_page}...`;
+          syncBtnLabel.textContent = `Syncing (+${data.new_synced || 0})...`;
           btnSync.disabled = true;
+          btnFullSync.disabled = true;
         } else {
           state.isSyncing = false;
           statusDot.className = 'status-dot';
-          statusText.textContent = `${data.stats.active_likes} Likes`;
-          syncBtnLabel.textContent = 'Sync Likes';
+          statusText.textContent = `${data.stats.active_likes} Likes (${data.stats.unread} unread)`;
+          syncBtnLabel.textContent = 'Sync New';
           btnSync.disabled = false;
+          btnFullSync.disabled = false;
         }
       } catch (err) {
         statusDot.style.background = '#ef4444';
@@ -1261,24 +1269,26 @@
     }
 
     // Trigger Sync
-    async function triggerSync() {
+    async function triggerSync(fullSync = false) {
       if (state.isSyncing) return;
       btnSync.disabled = true;
+      btnFullSync.disabled = true;
       syncBtnLabel.textContent = 'Requesting...';
 
       try {
         const res = await fetch('/api/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pages: 10 })
+          body: JSON.stringify({ pages: fullSync ? 25 : 15, full_sync: fullSync })
         });
         const data = await res.json();
-        showToast('Syncing likes from X in background...');
+        showToast(fullSync ? 'Full historical sync in progress...' : 'Incremental sync checking new likes...');
         pollSync();
       } catch (err) {
         showToast('Failed to start sync: ' + err.message);
         btnSync.disabled = false;
-        syncBtnLabel.textContent = 'Sync Likes';
+        btnFullSync.disabled = false;
+        syncBtnLabel.textContent = 'Sync New';
       }
     }
 
@@ -1290,18 +1300,22 @@
           const data = await res.json();
           if (data.is_syncing) {
             statusDot.className = 'status-dot syncing';
-            statusText.textContent = `Syncing page ${data.current_page}...`;
-            syncBtnLabel.textContent = `Syncing (${data.total_synced_session})...`;
+            statusText.textContent = `Syncing p.${data.current_page} (${data.sync_mode})...`;
+            syncBtnLabel.textContent = `Syncing (+${data.new_synced || 0})...`;
           } else {
             clearInterval(interval);
             checkStatus();
             fetchSearch(false);
-            showToast(`Sync complete! ${data.stats.active_likes} likes in archive.`);
+            if (data.new_synced > 0) {
+              showToast(`Sync complete! Added ${data.new_synced} new likes.`);
+            } else {
+              showToast('Already up to date! 0 new likes.');
+            }
           }
         } catch {
           clearInterval(interval);
         }
-      }, 2000);
+      }, 1500);
     }
 
     // Lightbox
@@ -1372,7 +1386,8 @@
       fetchSearch(true);
     };
 
-    btnSync.onclick = triggerSync;
+    btnSync.onclick = () => triggerSync(false);
+    btnFullSync.onclick = () => triggerSync(true);
 
     // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {

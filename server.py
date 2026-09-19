@@ -137,10 +137,23 @@ class LikesDB:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_likes_author ON likes(author_screen_name)")
 
     @classmethod
-    def save_tweets(cls, tweets: List[Dict[str, Any]]) -> int:
-        count = 0
+    def save_tweets(cls, tweets: List[Dict[str, Any]]) -> Dict[str, int]:
+        if not tweets:
+            return {"total": 0, "new": 0, "existing": 0}
+        new_count = 0
+        existing_count = 0
         with cls.get_conn() as conn:
+            ids = [t["id"] for t in tweets]
+            placeholders = ",".join("?" * len(ids))
+            existing_ids = set(
+                row[0] for row in conn.execute(f"SELECT id FROM likes WHERE id IN ({placeholders})", ids).fetchall()
+            )
             for t in tweets:
+                if t["id"] in existing_ids:
+                    existing_count += 1
+                else:
+                    new_count += 1
+
                 conn.execute("""
                     INSERT INTO likes (
                         id, author_name, author_screen_name, author_avatar, text,
@@ -156,8 +169,7 @@ class LikesDB:
                         retweet_count=excluded.retweet_count,
                         reply_count=excluded.reply_count,
                         media_urls=excluded.media_urls,
-                        urls=excluded.urls,
-                        is_liked=excluded.is_liked
+                        urls=excluded.urls
                 """, (
                     t["id"], t["author_name"], t["author_screen_name"], t["author_avatar"],
                     t["text"], t["created_at"], t["created_at_ts"], int(time.time()),
@@ -165,9 +177,8 @@ class LikesDB:
                     json.dumps(t["media_urls"]), json.dumps(t["urls"]), json.dumps(t.get("raw_json", {})),
                     t.get("is_liked", 1)
                 ))
-                count += 1
             conn.commit()
-        return count
+        return {"total": len(tweets), "new": new_count, "existing": existing_count}
 
     @classmethod
     def set_like_status(cls, tweet_id: str, is_liked: int):
@@ -473,7 +484,9 @@ class XClient:
 # Global sync status tracker
 class SyncManager:
     is_syncing = False
+    mode = "incremental"
     total_synced = 0
+    new_synced = 0
     current_page = 0
     last_sync_time = None
     error_msg = None
@@ -482,15 +495,19 @@ class SyncManager:
 sync_mgr = SyncManager()
 
 
-def background_sync_task(max_pages: int = 15):
+def background_sync_task(max_pages: int = 15, full_sync: bool = False):
     if sync_mgr.is_syncing:
         return
     sync_mgr.is_syncing = True
+    sync_mgr.mode = "full" if full_sync else "incremental"
     sync_mgr.error_msg = None
+    sync_mgr.new_synced = 0
+    sync_mgr.total_synced = 0
     client = XClient()
     cursor = None
     page = 0
     total_new = 0
+    total_processed = 0
 
     try:
         while page < max_pages:
@@ -501,9 +518,18 @@ def background_sync_task(max_pages: int = 15):
             if not tweets:
                 break
 
-            saved = LikesDB.save_tweets(tweets)
-            total_new += saved
-            sync_mgr.total_synced = total_new
+            stats = LikesDB.save_tweets(tweets)
+            total_new += stats["new"]
+            total_processed += stats["total"]
+            sync_mgr.new_synced = total_new
+            sync_mgr.total_synced = total_processed
+
+            # Incremental sync optimization:
+            # X returns likes ordered strictly newest to oldest.
+            # If we encounter multiple previously saved tweets, we have reached
+            # the boundary of our local archive and can stop immediately.
+            if not full_sync and stats["existing"] >= 3:
+                break
 
             cursor = res.get("next_cursor")
             if not cursor:
@@ -541,7 +567,9 @@ def get_status():
         "connected": has_auth,
         "user_id": client.user_id,
         "is_syncing": sync_mgr.is_syncing,
+        "sync_mode": sync_mgr.mode,
         "current_page": sync_mgr.current_page,
+        "new_synced": sync_mgr.new_synced,
         "total_synced_session": sync_mgr.total_synced,
         "last_sync": sync_mgr.last_sync_time,
         "sync_error": sync_mgr.error_msg,
@@ -575,15 +603,16 @@ def search_likes(
 
 
 class SyncRequest(BaseModel):
-    pages: int = 10
+    pages: int = 15
+    full_sync: bool = False
 
 
 @app.post("/api/sync")
 def trigger_sync(req: SyncRequest, bg_tasks: BackgroundTasks):
     if sync_mgr.is_syncing:
         return {"status": "already_syncing", "current_page": sync_mgr.current_page}
-    bg_tasks.add_task(background_sync_task, req.pages)
-    return {"status": "started", "pages_requested": req.pages}
+    bg_tasks.add_task(background_sync_task, req.pages, req.full_sync)
+    return {"status": "started", "mode": "full" if req.full_sync else "incremental", "pages_requested": req.pages}
 
 
 class TweetActionRequest(BaseModel):

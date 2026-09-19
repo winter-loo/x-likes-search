@@ -61,6 +61,9 @@ Unlike traditional scrapers that require hardcoded secrets or headless browser a
 `XClient` utilizes X's internal web client GraphQL endpoint:
 - **Operation:** `Likes` (`queryId: XHn_Tw60c6pi0n3DGhpwiA`)
 - **Pagination:** Bottom cursor tracking (`TimelineTimelineCursor`)
+- **Incremental vs Full Sync:**
+  - **Incremental Sync (Default):** Because X returns likes strictly ordered from newest to oldest, the engine compares each fetched batch against locally indexed IDs. As soon as it encounters tweets already present in SQLite, it terminates synchronization immediately. This cuts typical sync times from 20s to <1s and preserves API quotas.
+  - **Full Sync:** Traverses all historical pages up to the requested depth.
 - **Payload Normalization:** Extracts both standard tweets and `note_tweet` structures (handling long-form posts that exceed 280 characters), photo/video entities, and author metadata.
 
 ---

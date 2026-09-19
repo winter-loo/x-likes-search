@@ -33,7 +33,7 @@ def test_pipeline():
         "is_liked": 1
     }
     saved = LikesDB.save_tweets([sample_tweet])
-    assert saved == 1, "Failed to save sample tweet"
+    assert saved["total"] == 1, "Failed to save sample tweet"
     print("✓ DB insert passed")
 
     # 3. Test Search
