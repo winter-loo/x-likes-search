@@ -962,7 +962,7 @@
     // Check System Status
     async function checkStatus() {
       try {
-        const res = await fetch('/api/status');
+        const res = await fetch('api/status');
         const data = await res.json();
         
         if (data.is_syncing) {
@@ -1007,7 +1007,7 @@
       });
 
       try {
-        const res = await fetch(`/api/search?${params.toString()}`);
+        const res = await fetch(`api/search?${params.toString()}`);
         const data = await res.json();
 
         state.total = data.total;
@@ -1212,7 +1212,7 @@
       if (item) item.is_read = newStatus;
 
       try {
-        await fetch('/api/read', {
+        await fetch('api/read', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tweet_id: tweetId, is_read: newStatus })
@@ -1229,7 +1229,7 @@
       const btn = card?.querySelector('.btn-unlike');
       
       const newStatus = currentlyUnliked ? 1 : 0;
-      const endpoint = currentlyUnliked ? '/api/relike' : '/api/unlike';
+      const endpoint = currentlyUnliked ? 'api/relike' : 'api/unlike';
 
       // Optimistic UI Update
       if (newStatus === 0) {
@@ -1277,7 +1277,7 @@
       syncBtnLabel.textContent = 'Requesting...';
 
       try {
-        const res = await fetch('/api/sync', {
+        const res = await fetch('api/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ pages: fullSync ? 25 : 15, full_sync: fullSync })
@@ -1297,7 +1297,7 @@
     function pollSync() {
       const interval = setInterval(async () => {
         try {
-          const res = await fetch('/api/status');
+          const res = await fetch('api/status');
           const data = await res.json();
           if (data.is_syncing) {
             statusDot.className = 'status-dot syncing';

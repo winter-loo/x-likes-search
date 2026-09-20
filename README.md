@@ -126,6 +126,18 @@ Validates:
 
 ---
 
+## 🌐 Remote Access via deeloo.cn
+
+To access your local X Likes Vault securely from anywhere via `https://deeloo.cn/x-likes/`:
+
+1. Start the SSH reverse tunnel:
+   ```bash
+   ./scripts/tunnel.sh
+   ```
+2. The Nginx reverse proxy on `deeloo.cn` routes `https://deeloo.cn/x-likes/` through to your local port `8999` with Basic Auth protection.
+
+---
+
 ## 📄 License
 
 [MIT](LICENSE) © 2026 winter-loo
