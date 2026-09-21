@@ -358,6 +358,7 @@ class LikesDB:
         cls,
         q: Optional[str] = None,
         tag: Optional[str] = None,
+        tags: Optional[List[str]] = None,
         only_media: bool = False,
         include_unliked: bool = False,
         unread_only: bool = False,
@@ -378,9 +379,15 @@ class LikesDB:
             if only_media:
                 conditions.append("media_urls != '[]' AND media_urls IS NOT NULL")
 
-            if tag and tag.strip():
-                conditions.append("id IN (SELECT tweet_id FROM tweet_tags WHERE tag_name = ?)")
-                params.append(tag.strip())
+            # Filter by tags (supports multi-tag selection via OR)
+            tag_list = [t.strip() for t in (tags or []) if t.strip()]
+            if tag and tag.strip() and tag.strip() not in tag_list:
+                tag_list.append(tag.strip())
+
+            if tag_list:
+                placeholders = ",".join(["?"] * len(tag_list))
+                conditions.append(f"id IN (SELECT tweet_id FROM tweet_tags WHERE tag_name IN ({placeholders}))")
+                params.extend(tag_list)
 
             if q and q.strip():
                 terms = q.strip().split()
@@ -759,6 +766,7 @@ def get_status():
 def search_likes(
     q: Optional[str] = Query(None),
     tag: Optional[str] = Query(None),
+    tags: Optional[str] = Query(None),
     only_media: bool = Query(False),
     include_unliked: bool = Query(False),
     unread_only: bool = Query(False),
@@ -767,9 +775,11 @@ def search_likes(
     offset: int = Query(0, ge=0)
 ):
     t0 = time.time()
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
     results = LikesDB.search(
         q=q,
         tag=tag,
+        tags=tag_list,
         only_media=only_media,
         include_unliked=include_unliked,
         unread_only=unread_only,

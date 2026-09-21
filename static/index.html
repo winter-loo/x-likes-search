@@ -1056,7 +1056,8 @@
     // State
     const state = {
       q: '',
-      tag: null,
+      selectedTags: [],
+      availableTags: [],
       onlyMedia: false,
       includeUnliked: false,
       unreadOnly: false,
@@ -1065,7 +1066,6 @@
       offset: 0,
       total: 0,
       items: [],
-      tags: [],
       isLoading: false,
       isSyncing: false
     };
@@ -1205,7 +1205,7 @@
 
       const params = new URLSearchParams({
         q: state.q,
-        tag: state.tag || '',
+        tags: (state.selectedTags || []).join(','),
         only_media: state.onlyMedia,
         include_unliked: state.includeUnliked,
         unread_only: state.unreadOnly,
@@ -1242,7 +1242,12 @@
 
     function updateReadout(tookMs = 0) {
       const msText = tookMs > 0 ? ` (${tookMs}ms)` : '';
-      const tagText = state.tag ? ` • Filtered by <span style="color:#818cf8; font-weight:700; cursor:pointer;" onclick="filterByTag('${escapeHtml(state.tag)}')">#${escapeHtml(state.tag)} ✕</span>` : '';
+      let tagText = '';
+      if (state.selectedTags && state.selectedTags.length > 0) {
+        tagText = ' • Filtered by ' + state.selectedTags.map(t =>
+          `<span style="color:#818cf8; font-weight:700; cursor:pointer; margin-right:4px;" onclick="toggleTagFilter('${escapeHtml(t)}')">#${escapeHtml(t)} ✕</span>`
+        ).join(' ');
+      }
       statsReadout.innerHTML = `
         <span><strong>${state.total}</strong> likes found${msText}${tagText}</span>
       `;
@@ -1553,7 +1558,7 @@
       try {
         const res = await fetch('api/tags');
         const data = await res.json();
-        state.tags = data.tags || [];
+        state.availableTags = data.tags || [];
         renderTagCloud();
       } catch (err) {
         console.error('Failed to load tags:', err);
@@ -1563,14 +1568,14 @@
     function renderTagCloud() {
       const container = document.getElementById('tagCloudPills');
       if (!container) return;
-      if (!state.tags || state.tags.length === 0) {
+      if (!state.availableTags || state.availableTags.length === 0) {
         container.innerHTML = '<span style="color:var(--text-muted); font-size:12px;">暂无标签</span>';
         return;
       }
-      container.innerHTML = state.tags.map(t => {
-        const isActive = state.tag === t.name;
+      container.innerHTML = state.availableTags.map(t => {
+        const isActive = (state.selectedTags || []).includes(t.name);
         return `
-          <button class="tag-pill ${isActive ? 'active' : ''}" onclick="filterByTag('${escapeHtml(t.name)}')" title="${escapeHtml(t.description || t.name)}">
+          <button class="tag-pill ${isActive ? 'active' : ''}" onclick="toggleTagFilter('${escapeHtml(t.name)}')" title="${escapeHtml(t.description || t.name)}">
             <span class="tag-name">#${escapeHtml(t.name)}</span>
             <span class="tag-count">${t.count || 0}</span>
             ${!t.is_predefined ? `<span class="tag-delete-btn" onclick="event.stopPropagation(); deleteCustomTag('${escapeHtml(t.name)}')" title="删除此自定义标签">×</span>` : ''}
@@ -1579,14 +1584,20 @@
       }).join('');
     }
 
-    function filterByTag(tagName) {
-      if (state.tag === tagName) {
-        state.tag = null;
+    function toggleTagFilter(tagName) {
+      if (!state.selectedTags) state.selectedTags = [];
+      const idx = state.selectedTags.indexOf(tagName);
+      if (idx > -1) {
+        state.selectedTags.splice(idx, 1);
       } else {
-        state.tag = tagName;
+        state.selectedTags.push(tagName);
       }
       renderTagCloud();
       fetchSearch(false);
+    }
+
+    function filterByTag(tagName) {
+      toggleTagFilter(tagName);
     }
 
     async function deleteCustomTag(tagName) {
@@ -1594,7 +1605,9 @@
       try {
         await fetch(`api/tags/${encodeURIComponent(tagName)}`, { method: 'DELETE' });
         showToast(`已删除标签 #${tagName}`);
-        if (state.tag === tagName) state.tag = null;
+        if (state.selectedTags.includes(tagName)) {
+          state.selectedTags = state.selectedTags.filter(t => t !== tagName);
+        }
         fetchTags();
         fetchSearch(false);
       } catch (err) {
@@ -1696,7 +1709,7 @@
           state.onlyMedia = false;
           state.includeUnliked = false;
           state.unreadOnly = false;
-          state.tag = null;
+          state.selectedTags = [];
           renderTagCloud();
           document.querySelectorAll('.filter-chips [data-filter]').forEach(c => c.classList.remove('active'));
           chip.classList.add('active');
