@@ -15,7 +15,8 @@ DEFAULT_TAGS = {
     "编程语言": "Is this post related to programming languages, compilers, syntax, type systems, Rust, Go, Python, C++, or software engineering language features?",
     "CSS": "Is this post related to CSS, web styling, layout design, Tailwind, CSS tricks, animations, or styling frameworks?",
     "薅羊毛": "Is this post related to deals, discounts, cashback, free credits, promo codes, savings strategies, or financial bargains?",
-    "设计": "Is this post related to UI/UX design, user experience, product design, Figma, typography, visual art, aesthetics, or design systems?"
+    "设计": "Is this post related to UI/UX design, user experience, product design, Figma, typography, visual art, aesthetics, or design systems?",
+    "未分类": "Does this post NOT fit into any specific technical category like frontend, backend, databases, Linux, languages, design, or deals?"
 }
 
 def get_api_key() -> Optional[str]:
@@ -106,11 +107,18 @@ class TypeSafeClassifier:
                 answers = data.get("answers", {})
                 matched = []
                 for tag, ans in answers.items():
+                    if tag == "未分类":
+                        continue
                     prob = float(ans.get("noul", 0.0))
                     if prob >= threshold:
                         matched.append((tag, round(prob, 3)))
-                # Sort by confidence descending
-                matched.sort(key=lambda x: x[1], reverse=True)
+                # If none of the specific tags match, assign "未分类"
+                if not matched:
+                    unclassified_prob = float(answers.get("未分类", {}).get("noul", 1.0))
+                    matched.append(("未分类", round(max(unclassified_prob, 1.0), 3)))
+                else:
+                    # Sort by confidence descending
+                    matched.sort(key=lambda x: x[1], reverse=True)
                 return matched
         except Exception as e:
             # ponytail: network or API fail, return empty list instead of crashing sync
