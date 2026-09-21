@@ -9,12 +9,15 @@ import urllib.request
 import urllib.parse
 from pathlib import Path
 from email.utils import parsedate_to_datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 
 from fastapi import FastAPI, BackgroundTasks, Query
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+import threading
+
+from classifier import TypeSafeClassifier, DEFAULT_TAGS
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -136,11 +139,45 @@ class LikesDB:
                 conn.execute("ALTER TABLE likes ADD COLUMN sort_index INTEGER DEFAULT 0")
             except Exception:
                 pass
+            try:
+                conn.execute("ALTER TABLE likes ADD COLUMN tags TEXT DEFAULT '[]'")
+            except Exception:
+                pass
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS tags (
+                    name TEXT PRIMARY KEY,
+                    description TEXT DEFAULT '',
+                    is_predefined INTEGER DEFAULT 0,
+                    created_at INTEGER
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS tweet_tags (
+                    tweet_id TEXT NOT NULL,
+                    tag_name TEXT NOT NULL,
+                    confidence REAL DEFAULT 1.0,
+                    is_manual INTEGER DEFAULT 0,
+                    PRIMARY KEY (tweet_id, tag_name)
+                )
+            """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_likes_is_liked ON likes(is_liked)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_likes_is_read ON likes(is_read)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_likes_sort_index ON likes(sort_index DESC)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_likes_created_at_ts ON likes(created_at_ts DESC)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_likes_author ON likes(author_screen_name)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_tweet_tags_tag ON tweet_tags(tag_name)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_tweet_tags_tweet ON tweet_tags(tweet_id)")
+
+            # Initialize default predefined tags if table is empty
+            count = conn.execute("SELECT COUNT(*) FROM tags").fetchone()[0]
+            if count == 0:
+                for name, desc in DEFAULT_TAGS.items():
+                    conn.execute("""
+                        INSERT OR IGNORE INTO tags (name, description, is_predefined, created_at)
+                        VALUES (?, ?, 1, ?)
+                    """, (name, desc, int(time.time())))
+                conn.commit()
 
     @classmethod
     def save_tweets(cls, tweets: List[Dict[str, Any]]) -> Dict[str, int]:
@@ -148,6 +185,7 @@ class LikesDB:
             return {"total": 0, "new": 0, "existing": 0}
         new_count = 0
         existing_count = 0
+        new_tweets = []
         with cls.get_conn() as conn:
             ids = [t["id"] for t in tweets]
             placeholders = ",".join("?" * len(ids))
@@ -159,6 +197,7 @@ class LikesDB:
                     existing_count += 1
                 else:
                     new_count += 1
+                    new_tweets.append(t)
 
                 conn.execute("""
                     INSERT INTO likes (
@@ -187,7 +226,120 @@ class LikesDB:
                     t.get("is_liked", 1), t.get("sort_index", 0)
                 ))
             conn.commit()
+
+        # ponytail: asynchronously classify newly synced tweets with TypeSafe System One
+        if new_tweets:
+            def _bg_classify():
+                clf = TypeSafeClassifier()
+                for item in new_tweets:
+                    cls.classify_and_apply_tags(item["id"], item.get("text", ""), classifier=clf)
+            threading.Thread(target=_bg_classify, daemon=True).start()
+
         return {"total": len(tweets), "new": new_count, "existing": existing_count}
+
+    @classmethod
+    def get_tags(cls) -> List[Dict[str, Any]]:
+        with cls.get_conn() as conn:
+            rows = conn.execute("""
+                SELECT t.name, t.description, t.is_predefined,
+                       COUNT(DISTINCT CASE WHEN l.is_liked = 1 THEN tt.tweet_id END) as count
+                FROM tags t
+                LEFT JOIN tweet_tags tt ON t.name = tt.tag_name
+                LEFT JOIN likes l ON tt.tweet_id = l.id
+                GROUP BY t.name
+                ORDER BY count DESC, t.name ASC
+            """).fetchall()
+            return [dict(r) for r in rows]
+
+    @classmethod
+    def add_tag(cls, name: str, description: str = ""):
+        name = name.strip()
+        if not name:
+            return
+        with cls.get_conn() as conn:
+            conn.execute("""
+                INSERT INTO tags (name, description, is_predefined, created_at)
+                VALUES (?, ?, 0, ?)
+                ON CONFLICT(name) DO UPDATE SET description = excluded.description
+            """, (name, description, int(time.time())))
+            conn.commit()
+
+    @classmethod
+    def delete_tag(cls, name: str):
+        with cls.get_conn() as conn:
+            conn.execute("DELETE FROM tags WHERE name = ? AND is_predefined = 0", (name,))
+            conn.execute("DELETE FROM tweet_tags WHERE tag_name = ?", (name,))
+            rows = conn.execute("SELECT id FROM likes WHERE tags LIKE ?", (f'%"{name}"%',)).fetchall()
+            for r in rows:
+                tid = r[0]
+                tags = [t[0] for t in conn.execute("SELECT tag_name FROM tweet_tags WHERE tweet_id = ? ORDER BY tag_name ASC", (tid,)).fetchall()]
+                conn.execute("UPDATE likes SET tags = ? WHERE id = ?", (json.dumps(tags, ensure_ascii=False), tid))
+            conn.commit()
+
+    @classmethod
+    def get_all_tag_definitions(cls) -> Dict[str, str]:
+        with cls.get_conn() as conn:
+            rows = conn.execute("SELECT name, description FROM tags").fetchall()
+            if not rows:
+                return DEFAULT_TAGS
+            return {r["name"]: (r["description"] or f"Is this post related to {r['name']}?") for r in rows}
+
+    @classmethod
+    def tag_tweet(cls, tweet_id: str, tag_name: str, confidence: float = 1.0, is_manual: bool = False):
+        tag_name = tag_name.strip()
+        if not tag_name:
+            return
+        with cls.get_conn() as conn:
+            conn.execute("""
+                INSERT OR IGNORE INTO tags (name, description, is_predefined, created_at)
+                VALUES (?, '', 0, ?)
+            """, (tag_name, int(time.time())))
+            conn.execute("""
+                INSERT INTO tweet_tags (tweet_id, tag_name, confidence, is_manual)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(tweet_id, tag_name) DO UPDATE SET
+                    confidence = excluded.confidence,
+                    is_manual = MAX(tweet_tags.is_manual, excluded.is_manual)
+            """, (tweet_id, tag_name, confidence, 1 if is_manual else 0))
+            tags = [r[0] for r in conn.execute("SELECT tag_name FROM tweet_tags WHERE tweet_id = ? ORDER BY tag_name ASC", (tweet_id,)).fetchall()]
+            conn.execute("UPDATE likes SET tags = ? WHERE id = ?", (json.dumps(tags, ensure_ascii=False), tweet_id))
+            conn.commit()
+
+    @classmethod
+    def untag_tweet(cls, tweet_id: str, tag_name: str):
+        with cls.get_conn() as conn:
+            conn.execute("DELETE FROM tweet_tags WHERE tweet_id = ? AND tag_name = ?", (tweet_id, tag_name))
+            tags = [r[0] for r in conn.execute("SELECT tag_name FROM tweet_tags WHERE tweet_id = ? ORDER BY tag_name ASC", (tweet_id,)).fetchall()]
+            conn.execute("UPDATE likes SET tags = ? WHERE id = ?", (json.dumps(tags, ensure_ascii=False), tweet_id))
+            conn.commit()
+
+    @classmethod
+    def classify_and_apply_tags(cls, tweet_id: str, text: str, classifier: Optional[TypeSafeClassifier] = None) -> List[Tuple[str, float]]:
+        if not text or not text.strip():
+            return []
+        clf = classifier or TypeSafeClassifier()
+        tag_defs = cls.get_all_tag_definitions()
+        matched = clf.classify_text(text, tag_definitions=tag_defs, threshold=0.5)
+        for tag_name, conf in matched:
+            cls.tag_tweet(tweet_id, tag_name, confidence=conf, is_manual=False)
+        return matched
+
+    @classmethod
+    def classify_unlabeled_tweets(cls, limit: int = 50) -> int:
+        clf = TypeSafeClassifier()
+        with cls.get_conn() as conn:
+            rows = conn.execute("""
+                SELECT id, text FROM likes
+                WHERE (tags IS NULL OR tags = '[]' OR tags = '')
+                ORDER BY sort_index DESC
+                LIMIT ?
+            """, (limit,)).fetchall()
+
+        count = 0
+        for r in rows:
+            cls.classify_and_apply_tags(r["id"], r["text"] or "", classifier=clf)
+            count += 1
+        return count
 
     @classmethod
     def set_like_status(cls, tweet_id: str, is_liked: int):
@@ -205,6 +357,7 @@ class LikesDB:
     def search(
         cls,
         q: Optional[str] = None,
+        tag: Optional[str] = None,
         only_media: bool = False,
         include_unliked: bool = False,
         unread_only: bool = False,
@@ -224,6 +377,10 @@ class LikesDB:
 
             if only_media:
                 conditions.append("media_urls != '[]' AND media_urls IS NOT NULL")
+
+            if tag and tag.strip():
+                conditions.append("id IN (SELECT tweet_id FROM tweet_tags WHERE tag_name = ?)")
+                params.append(tag.strip())
 
             if q and q.strip():
                 terms = q.strip().split()
@@ -263,6 +420,7 @@ class LikesDB:
                 item = dict(r)
                 item["media_urls"] = json.loads(item["media_urls"] or "[]")
                 item["urls"] = json.loads(item["urls"] or "[]")
+                item["tags"] = json.loads(item.get("tags") or "[]")
                 item.pop("raw_json", None)
                 items.append(item)
 
@@ -600,6 +758,7 @@ def get_status():
 @app.get("/api/search")
 def search_likes(
     q: Optional[str] = Query(None),
+    tag: Optional[str] = Query(None),
     only_media: bool = Query(False),
     include_unliked: bool = Query(False),
     unread_only: bool = Query(False),
@@ -610,6 +769,7 @@ def search_likes(
     t0 = time.time()
     results = LikesDB.search(
         q=q,
+        tag=tag,
         only_media=only_media,
         include_unliked=include_unliked,
         unread_only=unread_only,
@@ -620,6 +780,53 @@ def search_likes(
     took_ms = round((time.time() - t0) * 1000, 2)
     results["took_ms"] = took_ms
     return results
+
+
+@app.get("/api/tags")
+def list_tags():
+    tags = LikesDB.get_tags()
+    return {"tags": tags}
+
+
+class AddTagRequest(BaseModel):
+    name: str
+    description: str = ""
+
+
+@app.post("/api/tags")
+def create_tag(req: AddTagRequest):
+    LikesDB.add_tag(req.name, req.description)
+    return {"success": True, "name": req.name}
+
+
+@app.delete("/api/tags/{name}")
+def remove_tag(name: str):
+    LikesDB.delete_tag(name)
+    return {"success": True, "name": name}
+
+
+class TweetTagRequest(BaseModel):
+    tag: str
+    action: str = "add"  # "add" or "remove"
+
+
+@app.post("/api/tweet/{tweet_id}/tags")
+def modify_tweet_tag(tweet_id: str, req: TweetTagRequest):
+    if req.action == "remove":
+        LikesDB.untag_tweet(tweet_id, req.tag)
+    else:
+        LikesDB.tag_tweet(tweet_id, req.tag, is_manual=True)
+    return {"success": True, "tweet_id": tweet_id, "tag": req.tag, "action": req.action}
+
+
+class ClassifyAllRequest(BaseModel):
+    limit: int = 50
+
+
+@app.post("/api/tags/classify_all")
+def trigger_classify_all(req: ClassifyAllRequest, bg_tasks: BackgroundTasks):
+    bg_tasks.add_task(LikesDB.classify_unlabeled_tweets, req.limit)
+    return {"status": "started", "limit": req.limit}
 
 
 class SyncRequest(BaseModel):

@@ -343,6 +343,194 @@
       gap: 6px;
     }
 
+    /* Tag Cloud Section */
+    .tag-cloud-section {
+      background: rgba(17, 19, 28, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 14px 18px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
+      transition: var(--transition-smooth);
+    }
+    .tag-cloud-section:hover {
+      border-color: rgba(99, 102, 241, 0.25);
+    }
+    .tag-cloud-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .tag-cloud-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--text-primary);
+    }
+    .tag-cloud-sub {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(6, 182, 212, 0.2));
+      color: #818cf8;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .tag-cloud-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-tag-action {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: var(--transition-fast);
+      outline: none;
+    }
+    .btn-tag-action:hover {
+      background: rgba(99, 102, 241, 0.15);
+      border-color: var(--accent-primary);
+      color: #a5b4fc;
+      transform: translateY(-1px);
+    }
+    .tag-cloud-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .tag-pill {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 5px 12px;
+      border-radius: var(--radius-full);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: var(--transition-fast);
+      user-select: none;
+      outline: none;
+    }
+    .tag-pill:hover {
+      background: rgba(99, 102, 241, 0.12);
+      border-color: rgba(99, 102, 241, 0.35);
+      color: #c7d2fe;
+      transform: translateY(-1px);
+    }
+    .tag-pill.active {
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(168, 85, 247, 0.25));
+      border-color: var(--accent-primary);
+      color: #ffffff;
+      font-weight: 600;
+      box-shadow: 0 0 14px var(--accent-primary-glow);
+    }
+    .tag-count {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-muted);
+      border-radius: 9999px;
+      padding: 1px 6px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      font-weight: 600;
+    }
+    .tag-pill.active .tag-count {
+      background: rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+    }
+    .tag-delete-btn {
+      margin-left: 2px;
+      color: var(--text-muted);
+      border-radius: 50%;
+      width: 14px;
+      height: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      transition: var(--transition-fast);
+    }
+    .tag-delete-btn:hover {
+      color: var(--accent-rose);
+      background: rgba(244, 63, 94, 0.2);
+    }
+
+    /* Card Tags */
+    .tweet-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      margin-top: 4px;
+    }
+    .card-tag-pill {
+      background: rgba(99, 102, 241, 0.08);
+      border: 1px solid rgba(99, 102, 241, 0.22);
+      color: #a5b4fc;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: var(--radius-full);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: var(--transition-fast);
+    }
+    .card-tag-pill:hover {
+      background: rgba(99, 102, 241, 0.22);
+      border-color: var(--accent-primary);
+      color: #ffffff;
+      transform: translateY(-1px);
+      box-shadow: 0 0 10px var(--accent-primary-glow);
+    }
+    .tag-remove-btn {
+      color: rgba(255, 255, 255, 0.35);
+      font-size: 13px;
+      line-height: 1;
+      padding: 0 2px;
+      border-radius: 50%;
+    }
+    .tag-remove-btn:hover {
+      color: var(--accent-rose);
+    }
+    .card-add-tag-btn {
+      background: transparent;
+      border: 1px dashed var(--border-subtle);
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: var(--radius-full);
+      cursor: pointer;
+      transition: var(--transition-fast);
+      outline: none;
+    }
+    .card-add-tag-btn:hover {
+      border-color: var(--accent-primary);
+      color: var(--text-primary);
+      background: rgba(99, 102, 241, 0.1);
+    }
+
     /* Feed Container */
     .feed-container {
       display: flex;
@@ -810,6 +998,23 @@
       </div>
     </div>
 
+    <!-- Tag Cloud (TypeSafe AI Classification) -->
+    <div class="tag-cloud-section" id="tagCloudSection">
+      <div class="tag-cloud-header">
+        <div class="tag-cloud-title">
+          <span>🏷️ 智能分类标签云</span>
+          <span class="tag-cloud-sub">TypeSafe AI</span>
+        </div>
+        <div class="tag-cloud-actions">
+          <button class="btn-tag-action" id="btnClassifyAll" title="使用 TypeSafe Jev AI 为本地未打标推文自动识别分类">⚡ AI 批量标引</button>
+          <button class="btn-tag-action" id="btnAddCustomTag" title="添加新标签与提示词">+ 新增标签</button>
+        </div>
+      </div>
+      <div class="tag-cloud-pills" id="tagCloudPills">
+        <!-- Rendered via JS -->
+      </div>
+    </div>
+
     <!-- Filter & Readout -->
     <div class="controls-bar">
       <div class="filter-chips">
@@ -851,6 +1056,7 @@
     // State
     const state = {
       q: '',
+      tag: null,
       onlyMedia: false,
       includeUnliked: false,
       unreadOnly: false,
@@ -859,6 +1065,7 @@
       offset: 0,
       total: 0,
       items: [],
+      tags: [],
       isLoading: false,
       isSyncing: false
     };
@@ -998,6 +1205,7 @@
 
       const params = new URLSearchParams({
         q: state.q,
+        tag: state.tag || '',
         only_media: state.onlyMedia,
         include_unliked: state.includeUnliked,
         unread_only: state.unreadOnly,
@@ -1034,8 +1242,9 @@
 
     function updateReadout(tookMs = 0) {
       const msText = tookMs > 0 ? ` (${tookMs}ms)` : '';
+      const tagText = state.tag ? ` • Filtered by <span style="color:#818cf8; font-weight:700; cursor:pointer;" onclick="filterByTag('${escapeHtml(state.tag)}')">#${escapeHtml(state.tag)} ✕</span>` : '';
       statsReadout.innerHTML = `
-        <span><strong>${state.total}</strong> likes found${msText}</span>
+        <span><strong>${state.total}</strong> likes found${msText}${tagText}</span>
       `;
 
       if (state.items.length < state.total) {
@@ -1132,6 +1341,16 @@
             </div>
 
             ${mediaHtml}
+
+            <div class="tweet-tags">
+              ${(tweet.tags || []).map(t => `
+                <span class="card-tag-pill" onclick="filterByTag('${escapeHtml(t)}')" title="过滤 #${escapeHtml(t)}">
+                  #${escapeHtml(t)}
+                  <span class="tag-remove-btn" onclick="event.stopPropagation(); removeTweetTag('${tweet.id}', '${escapeHtml(t)}')" title="移除标签">×</span>
+                </span>
+              `).join('')}
+              <button class="card-add-tag-btn" onclick="promptAddTag('${tweet.id}')" title="为此推文添加标签">+ 标签</button>
+            </div>
 
             <div class="tweet-footer">
               <div class="tweet-metrics">
@@ -1329,6 +1548,127 @@
       if (e.target === lightboxModal) lightboxModal.classList.remove('active');
     };
 
+    // Tag Cloud Logic
+    async function fetchTags() {
+      try {
+        const res = await fetch('api/tags');
+        const data = await res.json();
+        state.tags = data.tags || [];
+        renderTagCloud();
+      } catch (err) {
+        console.error('Failed to load tags:', err);
+      }
+    }
+
+    function renderTagCloud() {
+      const container = document.getElementById('tagCloudPills');
+      if (!container) return;
+      if (!state.tags || state.tags.length === 0) {
+        container.innerHTML = '<span style="color:var(--text-muted); font-size:12px;">暂无标签</span>';
+        return;
+      }
+      container.innerHTML = state.tags.map(t => {
+        const isActive = state.tag === t.name;
+        return `
+          <button class="tag-pill ${isActive ? 'active' : ''}" onclick="filterByTag('${escapeHtml(t.name)}')" title="${escapeHtml(t.description || t.name)}">
+            <span class="tag-name">#${escapeHtml(t.name)}</span>
+            <span class="tag-count">${t.count || 0}</span>
+            ${!t.is_predefined ? `<span class="tag-delete-btn" onclick="event.stopPropagation(); deleteCustomTag('${escapeHtml(t.name)}')" title="删除此自定义标签">×</span>` : ''}
+          </button>
+        `;
+      }).join('');
+    }
+
+    function filterByTag(tagName) {
+      if (state.tag === tagName) {
+        state.tag = null;
+      } else {
+        state.tag = tagName;
+      }
+      renderTagCloud();
+      fetchSearch(false);
+    }
+
+    async function deleteCustomTag(tagName) {
+      if (!confirm(`确定要删除自定义标签 #${tagName} 吗？`)) return;
+      try {
+        await fetch(`api/tags/${encodeURIComponent(tagName)}`, { method: 'DELETE' });
+        showToast(`已删除标签 #${tagName}`);
+        if (state.tag === tagName) state.tag = null;
+        fetchTags();
+        fetchSearch(false);
+      } catch (err) {
+        showToast('删除标签失败: ' + err.message);
+      }
+    }
+
+    async function promptAddTag(tweetId) {
+      const tag = prompt('输入要为此推文添加的标签名称（可输入已有标签或新标签）：');
+      if (!tag || !tag.trim()) return;
+      try {
+        await fetch(`api/tweet/${tweetId}/tags`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tag: tag.trim(), action: 'add' })
+        });
+        showToast(`已添加标签 #${tag.trim()}`);
+        fetchTags();
+        fetchSearch(false);
+      } catch (err) {
+        showToast('添加标签失败: ' + err.message);
+      }
+    }
+
+    async function removeTweetTag(tweetId, tagName) {
+      try {
+        await fetch(`api/tweet/${tweetId}/tags`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tag: tagName, action: 'remove' })
+        });
+        showToast(`已移除标签 #${tagName}`);
+        fetchTags();
+        fetchSearch(false);
+      } catch (err) {
+        showToast('移除标签失败: ' + err.message);
+      }
+    }
+
+    async function createNewTag() {
+      const name = prompt('请输入新标签名称（例如：AI、量化、安全、架构）：');
+      if (!name || !name.trim()) return;
+      const desc = prompt(`请输入 #${name.trim()} 的定义说明（供 TypeSafe AI 自动识别此分类使用）：`, `Is this post related to ${name.trim()}?`);
+      try {
+        await fetch('api/tags', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name.trim(), description: desc || '' })
+        });
+        showToast(`成功新增标签 #${name.trim()}`);
+        fetchTags();
+      } catch (err) {
+        showToast('创建标签失败: ' + err.message);
+      }
+    }
+
+    async function classifyAllUnlabeled() {
+      showToast('正在使用 TypeSafe AI 批量分析未打标推文...');
+      try {
+        await fetch('api/tags/classify_all', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ limit: 50 })
+        });
+        showToast('TypeSafe AI 批量分析任务已在后台启动');
+        setTimeout(() => {
+          fetchTags();
+          fetchSearch(false);
+        }, 3000);
+      } catch (err) {
+        showToast('触发失败: ' + err.message);
+      }
+    }
+
     // Event Listeners
     const onSearchInput = debounce((e) => {
       state.q = e.target.value;
@@ -1356,6 +1696,8 @@
           state.onlyMedia = false;
           state.includeUnliked = false;
           state.unreadOnly = false;
+          state.tag = null;
+          renderTagCloud();
           document.querySelectorAll('.filter-chips [data-filter]').forEach(c => c.classList.remove('active'));
           chip.classList.add('active');
         } else if (filter === 'unread') {
@@ -1389,6 +1731,8 @@
 
     btnSync.onclick = () => triggerSync(false);
     btnFullSync.onclick = () => triggerSync(true);
+    document.getElementById('btnAddCustomTag').onclick = createNewTag;
+    document.getElementById('btnClassifyAll').onclick = classifyAllUnlabeled;
 
     // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
@@ -1407,6 +1751,7 @@
 
     // Initial Load
     checkStatus();
+    fetchTags();
     fetchSearch();
   </script>
 </body>

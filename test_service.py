@@ -79,9 +79,23 @@ def test_pipeline():
     assert "items" in resp.json()
     print("✓ API /api/search passed")
 
+    # 7. Test Tags & Tag Cloud API
+    resp = client.get("/api/tags")
+    assert resp.status_code == 200
+    tags_data = resp.json()["tags"]
+    assert any(t["name"] == "数据库" for t in tags_data), "Default tag 数据库 missing"
+    print("✓ API /api/tags passed")
+
+    # 8. Test Tag Tweet & Search by Tag
+    LikesDB.tag_tweet("test_tweet_999", "数据库", confidence=0.99, is_manual=True)
+    res_tag = LikesDB.search(tag="数据库")
+    assert any(i["id"] == "test_tweet_999" for i in res_tag["items"]), "Tagged tweet not found in tag search"
+    print("✓ Tag search & tweet tagging passed")
+
     # Cleanup test record
     with LikesDB.get_conn() as conn:
         conn.execute("DELETE FROM likes WHERE id = 'test_tweet_999'")
+        conn.execute("DELETE FROM tweet_tags WHERE tweet_id = 'test_tweet_999'")
         conn.commit()
 
     print("\nALL SELF-CHECKS PASSED!")
